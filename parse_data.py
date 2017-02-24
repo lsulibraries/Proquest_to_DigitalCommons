@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+
 import os
 import csv
 
@@ -38,9 +39,25 @@ def make_set_of_restricteds():
 
 
 def lookup_clean_title(record):
+    wrong_roman_numeral = {' Ii': ' II',
+                           ' Iii ': ' III ',
+                           '-Iii': '-III',
+                           ' Iii.': ' III.',
+                           ' Iv ': ' IV ',
+                           ' Vi ': ' VI ',
+                           ' Iv.': ' IV.',
+                           ' Iv)': 'IV)',
+                           ' Viii': ' VIII',
+                           '-Vii ': '-VII',
+                           '-Viii': '-VIII',
+                           ' Vii': ' VII',
+                           }
     text = record.get_fields('245')[0].value()
     text = titlecase(text)
     text = text.replace(':  ', ": ")
+    for k, v in wrong_roman_numeral.items():
+        if k in text:
+            text = text.replace(k, v)
     return text
 
 
@@ -61,6 +78,13 @@ def parse_500(record):
         return value_500[0], ''
     else:
         return value_500[0], value_500[1]
+
+
+def find_source(record):
+    fields = [i.value() for i in record.get_fields('500') if 'Source' in i.value()][0]
+    fields = unperiod(fields)
+    fields = fields.replace('Source: ', '')
+    return fields
 
 
 def split_directors(text_b):
@@ -89,14 +113,14 @@ def parse_advisors_field(text):
         if title in text:
             text = text.replace(title, '')
             text = text
-            text = remove_last_period_from_string(text)
+            text = unperiod(text)
             if text:
                 return [i.strip() for i in text.split('; ')]
     else:
         return ''
 
 
-def remove_last_period_from_string(text):
+def unperiod(text):
     if text[-1] == '.':
         return text[:-1]
     return text
@@ -123,7 +147,7 @@ def combine_650(record):
 
 def parse_author_names(record):
     name_clump = record.get_fields('100')[0].value()
-    name_clump = remove_last_period_from_string(name_clump)
+    name_clump = unperiod(name_clump)
     name = HumanName(name_clump)
     last_name = name.last
     middle_name = name.middle
@@ -133,7 +157,9 @@ def parse_author_names(record):
         first_name = "{} {}".format(name.first, name.nickname)
     else:
         first_name = name.first
-    return first_name.capitalize(), middle_name.capitalize(), last_name.capitalize(), suffix
+    if "arch" in last_name.lower():
+        print(name_clump)
+    return titlecase(first_name), titlecase(middle_name), titlecase(last_name), suffix
 
 
 def standardize_suffix(text):
@@ -150,8 +176,14 @@ def standardize_suffix(text):
 
 def lookup_inst(record):
     text = record.get_fields('710')[0].value()
-    text = remove_last_period_from_string(text)
+    text = unperiod(text)
     return text
+
+
+def lookup_isbn(record):
+    if record.get_fields('020'):
+        return record.get_fields('020')[0].value()
+    return ''
 
 
 def csv_writer(data, path):
@@ -185,6 +217,13 @@ def build_csv(to_do_records):
                      'publication_date',
                      'season',
                      'release_date',
+                     'ISBN',
+                     'pagelength',
+                     'source',
+                     'diss_note',
+                     'host_item',
+                     'language',
+                     'host_url',
                      ]
     csv_data.append(csvfieldnames)
 
@@ -207,6 +246,13 @@ def build_csv(to_do_records):
         csv_publication_date = record.get_fields('792')[0].value()
         csv_season = ''
         csv_release_date = ''
+        csv_isbn = lookup_isbn(record)
+        csv_pagelength = record.get_fields('300')[0].value().replace(' p.', '')
+        csv_source = find_source(record)
+        csv_diss_note = unperiod(record.get_fields('502')[0].value())
+        csv_host_item = unperiod(record.get_fields('773')[0].value())
+        csv_language = record.get_fields('793')[0].value()
+        csv_host_url = record.get_fields('856')[0].value()
 
         csv_data.append([csv_urn,
                          csv_title,
@@ -230,6 +276,13 @@ def build_csv(to_do_records):
                          csv_publication_date,
                          csv_season,
                          csv_release_date,
+                         csv_isbn,
+                         csv_pagelength,
+                         csv_source,
+                         csv_diss_note,
+                         csv_host_item,
+                         csv_language,
+                         csv_host_url,
                          ])
     output_folder = '/home/francis/Desktop/lsu-git/Proquest_to_DigitalCommons/output'
     os.makedirs(output_folder, exist_ok=True)
